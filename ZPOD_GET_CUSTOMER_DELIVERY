@@ -1,0 +1,290 @@
+*&---------------------------------------------------------------------*
+*& Report  ZPOD_GET_CUSTOMER_DELIVERY
+*&
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+
+REPORT  ZPOD_GET_CUSTOMER_DELIVERY.
+tables: ZGANTRYINFO.
+DATA: name TYPE STRING.
+data: nh1 type string, nh2 type string , nh3 type string , lh1 type string , ul1 type string, ul2 type string , ul3 type string,
+      lh2 type string , lh3 type string , th1 type string , th2 type string , vgbel type vgbel,
+       th3 type string.
+data kunnr type kunnr.
+data podreturn type ZPOD_INFO_INTERFACE.
+data vbeln like likp-vbeln.
+data posnr like lips-posnr.
+data podtable type table of zpod_info_interface.
+data qty type string.
+data cts type string.
+data tabix type i.
+data tbs type string.
+data podat like likp-podat.
+data custname type kna1-NAME1.
+
+data:
+      query_string type table of w3query,
+      html type table of w3html,
+      mime type table of w3mime.
+
+data:
+       pa_user(30) type c,"FTP Server User
+        pa_pswrd(30) type c ,"FTP Server User's Password
+        pa_host(64) type c,"IP Address of the FTP Server
+        pa_rfcds like rfcdes-rfcdest value 'SAPFTPA',
+
+      mi_key type i value 26101957,"Hardcoded Handler Key,This is always '26101957'
+      mi_pwd_len type i ,"For finding the length of the Password,This is used when scrambling the password
+      mi_handle type i.
+
+
+
+*  initialize ftp connection parameters
+move: 'cyril' to pa_user,
+    'password%%' to pa_pswrd,
+    '54.93.100.18' to pa_host.
+
+
+
+DATA: htmldoc LIKE LINE OF HTML.
+move '{"results":[' to htmldoc-line.
+insert htmldoc into table html.
+
+data e_date type sy-datum.
+parameters b_date type sy-datum.
+
+
+data dstr type string.
+
+if b_date is initial.
+  move sy-datum to dstr.
+  concatenate dstr+0(6) '01' into dstr.
+  move dstr to b_date.
+endif.
+*move '20160101' to b_date.
+move sy-datum to e_date.
+
+data count type i.
+data pdstk like vbuk-pdstk.
+
+select l~vbeln v~pdstk into (vbeln,pdstk) from likp  as l  inner join vbuk as v on l~vbeln
+= v~vbeln inner join lips as ls on l~vbeln = ls~vbeln where v~wbstk = 'C' and l~wadat <= e_date and l~wadat >= b_date
+and v~pdstk = 'A' and ls~matnr in
+  ('000000000000000001',
+  '000000000000000002',
+  '000000000000000003',
+  '000000000000000004').
+
+endselect.
+
+move sy-dbcnt to count.
+move count to cts.
+
+select single name1 into custname from  kna1 where kunnr = kunnr.
+
+
+data counter type i value 1.
+
+select l~vbeln l~podat l~kunnr v~pdstk into (vbeln,podat,kunnr,pdstk) from likp  as l  inner join vbuk as v on l~vbeln
+    = v~vbeln inner join lips as ls on l~vbeln = ls~vbeln where
+    v~wbstk = 'C' and l~wadat <= e_date and l~wadat >= b_date
+    and v~pdstk = 'A' and ls~matnr in
+  ('000000000000000001',
+  '000000000000000002',
+  '000000000000000003',
+  '000000000000000004').
+
+clear:
+custname,
+zgantryinfo,
+podreturn,
+vgbel, nh1,nh2,nh3,lh1,lh2,lh3,th1,th2,th3,ul1,ul2,ul3.
+
+  select single name1 into custname from  kna1 where kunnr = kunnr.
+  move vbeln to podreturn-vbeln.
+  select single * from ZGANTRYINFO  where vbeln = podreturn-vbeln.
+
+  move-CORRESPONDING zgantryinfo to    podreturn.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = podreturn-haulier
+    IMPORTING
+      OUTPUT = podreturn-haulier.
+
+
+  select single  name1 into podreturn-transporter from lfa1
+    where lifnr = podreturn-haulier.
+
+  select single lfimg into podreturn-quantity from lips where vbeln = podreturn-vbeln.
+  move podreturn-quantity to qty.
+  clear htmldoc-line.
+  move:
+    zgantryinfo-NHEIGHT1 to nh1,
+    zgantryinfo-NHEIGHT2 to nh2,
+    zgantryinfo-NHEIGHT3 to nh3,
+    zgantryinfo-LHEIGHT1 to lh1,
+    zgantryinfo-LHEIGHT2 to lh2,
+    zgantryinfo-LHEIGHT3 to lh3,
+    zgantryinfo-THEIGHT1 to th1,
+    zgantryinfo-THEIGHT2 to th2,
+    zgantryinfo-THEIGHT3 to th3,
+    zgantryinfo-ploading1 to ul1,
+    zgantryinfo-ploading2 to ul2,
+    zgantryinfo-ploading3 to ul3,
+    zgantryinfo-vgbel to vgbel.
+  if counter =  count .
+    CONCATENATE '' '{"vbeln":"' vbeln
+*      '","posnr":"' podreturn-posnr
+    '","driver":"' podreturn-driver
+    '","custno":"' kunnr
+    '","custname":"' custname
+    '","quantity":"' qty
+    '","del_date":"' podat '"'
+    ',"vgbel":"' vgbel '"'
+
+    into htmldoc-line.
+
+
+    insert htmldoc into table html.
+
+
+
+    concatenate
+    ',"truckno":"' podreturn-truckno
+    '","status":"' pdstk
+    '","transporter":"' podreturn-transporter
+    '","nh1":"' nh1
+    '","nh2":"' nh2
+    '","nh3":"' nh3
+    '","lh1":"' lh1 '"'
+    into htmldoc-line.
+
+
+    insert htmldoc into table html.
+    CONCATENATE
+    ',"lh2":"' lh2
+    '","lh3":"' lh3
+    '","th1":"' th1
+    '","th2":"' th2
+    '","th3":"' th3
+    '","ul1":"' ul1
+    '","ul2":"' ul2
+    '","ul3":"' ul3
+    '","cellnumber":"' ZGANTRYINFO-CELLNO
+    '"}'
+    into htmldoc-line.
+  else.
+    CONCATENATE '' '{"vbeln":"' vbeln
+*      '","posnr":"' podreturn-posnr
+   '","driver":"' podreturn-driver
+   '","custno":"' kunnr
+    '","custname":"' custname
+   '","quantity":"' qty
+   '","del_date":"' podat '"'
+   ',"vgbel":"' vgbel '"'
+
+   into htmldoc-line.
+
+
+    insert htmldoc into table html.
+
+
+    concatenate
+    ',"truckno":"' podreturn-truckno
+    '","status":"' pdstk
+   '","transporter":"' podreturn-transporter
+     '","nh1":"' nh1
+     '","nh2":"' nh2
+     '","nh3":"' nh3
+     '","lh1":"' lh1 '"'
+     into htmldoc-line.
+
+
+    insert htmldoc into table html.
+
+    CONCATENATE
+     ',"lh2":"' lh2
+     '","lh3":"' lh3
+     '","th1":"' th1
+     '","th2":"' th2
+     '","th3":"' th3
+     '","ul1":"' ul1
+    '","ul2":"' ul2
+    '","ul3":"' ul3
+     '","cellnumber":"' ZGANTRYINFO-CELLNO
+    '"},'
+    into htmldoc-line.
+  endif.
+
+
+  insert htmldoc into table html.
+
+  add 1 to counter.
+endselect.
+
+
+
+move ']}' to htmldoc-line.
+insert htmldoc into table html.
+
+
+"FTP Communication Data Objects - [END]
+SET EXTENDED CHECK OFF.
+mi_pwd_len = STRLEN( pa_pswrd ).
+CALL FUNCTION 'HTTP_SCRAMBLE'"For Encrypting the Password
+  EXPORTING
+    SOURCE      = pa_pswrd
+    sourcelen   = mi_pwd_len
+    key         = mi_key
+  IMPORTING
+    destination = pa_pswrd.
+CALL FUNCTION 'FTP_CONNECT'"For connecting to the FTP Server's user directory
+     EXPORTING
+       user            = pa_user
+       password        = pa_pswrd
+       host            = pa_host
+       rfc_destination = pa_rfcds "Using the Background SAP FTP Library as part of the SAP backend System
+     IMPORTING
+       handle          = mi_handle
+     EXCEPTIONS
+       not_connected   = 1
+       OTHERS          = 2.
+IF sy-subrc = 0."When FTP connection established Successfully
+
+  DATA : path(58) ."Path that points to the FTP User's Home Directory
+  DATA:extension(5).
+  extension = '.json' .
+  CONCATENATE '/json/sapr3/customerdeliveries' '' extension INTO path .
+  CALL FUNCTION 'FTP_R3_TO_SERVER'"For Creating a file from SAP R3 to FTP Server
+    EXPORTING
+      handle         = mi_handle
+      fname          = path
+      character_mode = 'X'
+    TABLES
+      text           = html"Final Internal table to be written to the text file in the FTP Server's Directory
+    EXCEPTIONS
+      tcpip_error    = 1
+      command_error  = 2
+      data_error     = 3
+      OTHERS         = 4.
+ELSE."When FTP connection Fails
+  WRITE: / 'Error in FTP Command'.
+ENDIF.
+CALL FUNCTION 'FTP_DISCONNECT'"For Disconnecting the connected FTP Session
+  EXPORTING
+    handle = mi_handle
+  EXCEPTIONS
+    OTHERS = 1.
+"For Disabling data typed in the FTP User's password field
+*at selection-screen output.
+loop at screen.
+  if screen-name = 'PA_PSWRD'.
+    screen-invisible = '1'.
+    modify screen.
+  endif.
+endloop.
+
+write 'Completed....'.

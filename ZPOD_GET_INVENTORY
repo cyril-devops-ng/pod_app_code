@@ -1,0 +1,155 @@
+*&---------------------------------------------------------------------*
+*& Report  ZPOD_GET_INVENTORY
+*&
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+
+REPORT  ZPOD_GET_INVENTORY.
+tables: mard.
+
+data: matnr type matnr,
+      werks type werks_d,
+      lgort type lgort_d,
+      labst type labst,
+      lab type string.
+
+data count type i.
+data counter type i value 1.
+data plantname type string.
+data storename type string.
+data name1 type string.
+data ort01 type string.
+data:
+      query_string type table of w3query,
+      html type table of w3html,
+      mime type table of w3mime.
+
+data:
+       pa_user(30) type c,"FTP Server User
+        pa_pswrd(30) type c ,"FTP Server User's Password
+        pa_host(64) type c,"IP Address of the FTP Server
+        pa_rfcds like rfcdes-rfcdest value 'SAPFTPA',
+
+      mi_key type i value 26101957,"Hardcoded Handler Key,This is always '26101957'
+      mi_pwd_len type i ,"For finding the length of the Password,This is used when scrambling the password
+      mi_handle type i.
+
+
+
+*  initialize ftp connection parameters
+move: 'cyril' to pa_user,
+    'passw0rd%%' to pa_pswrd,
+    '54.93.100.18' to pa_host.
+
+
+
+DATA: htmldoc LIKE LINE OF HTML.
+move '{"results":[' to htmldoc-line.
+insert htmldoc into table html.
+
+
+select * from mard where matnr eq '000000000000000001' or  matnr eq '000000000000000002' or
+   matnr eq '000000000000000003' or  matnr eq '000000000000000004'.
+
+endselect.
+
+move sy-DBCNT to count.
+
+select * from mard where matnr eq '000000000000000001' or  matnr eq '000000000000000002' or
+   matnr eq '000000000000000003' or  matnr eq '000000000000000004'.
+
+  select single name1 ort01 into (name1,ort01) from t001w where werks = mard-werks.
+  concatenate name1 ', ' ort01 into plantname.
+  select single lgobe into storename from t001l where werks = mard-werks and lgort = mard-lgort.
+  if counter = count.
+    move mard-labst to lab.
+    CONCATENATE '' '{"matnr":"' mard-matnr
+*      '","posnr":"' podreturn-posnr
+          '","werks":"' mard-werks
+          '","lgort":"' mard-lgort
+          '","plantname":"' plantname
+          '","storename":"' storename
+          '","labst":"' lab
+
+          '"}'
+          into htmldoc-line.
+  else.
+    move mard-labst to lab.
+    CONCATENATE '' '{"matnr":"' mard-matnr
+*      '","posnr":"' podreturn-posnr
+    '","werks":"' mard-werks
+    '","lgort":"' mard-lgort
+    '","plantname":"' plantname
+    '","storename":"' storename
+    '","labst":"' lab
+
+   '"},'
+   into htmldoc-line.
+  endif.
+
+  insert htmldoc into table html.
+  add 1 to counter.
+endselect.
+move ']}' to htmldoc-line.
+insert htmldoc into table html.
+
+
+"FTP Communication Data Objects - [END]
+SET EXTENDED CHECK OFF.
+mi_pwd_len = STRLEN( pa_pswrd ).
+CALL FUNCTION 'HTTP_SCRAMBLE'"For Encrypting the Password
+  EXPORTING
+    SOURCE      = pa_pswrd
+    sourcelen   = mi_pwd_len
+    key         = mi_key
+  IMPORTING
+    destination = pa_pswrd.
+CALL FUNCTION 'FTP_CONNECT'"For connecting to the FTP Server's user directory
+     EXPORTING
+       user            = pa_user
+       password        = pa_pswrd
+       host            = pa_host
+       rfc_destination = pa_rfcds "Using the Background SAP FTP Library as part of the SAP backend System
+     IMPORTING
+       handle          = mi_handle
+     EXCEPTIONS
+       not_connected   = 1
+       OTHERS          = 2.
+IF sy-subrc = 0."When FTP connection established Successfully
+
+  DATA : path(58) ."Path that points to the FTP User's Home Directory
+  DATA:extension(5).
+  extension = '.json' .
+  CONCATENATE '/json/sapr3/inventory_' sy-datum extension INTO path .
+  CALL FUNCTION 'FTP_R3_TO_SERVER'"For Creating a file from SAP R3 to FTP Server
+    EXPORTING
+      handle         = mi_handle
+      fname          = path
+      character_mode = 'X'
+    TABLES
+      text           = html"Final Internal table to be written to the text file in the FTP Server's Directory
+    EXCEPTIONS
+      tcpip_error    = 1
+      command_error  = 2
+      data_error     = 3
+      OTHERS         = 4.
+ELSE."When FTP connection Fails
+  WRITE: / 'Error in FTP Command'.
+ENDIF.
+CALL FUNCTION 'FTP_DISCONNECT'"For Disconnecting the connected FTP Session
+  EXPORTING
+    handle = mi_handle
+  EXCEPTIONS
+    OTHERS = 1.
+"For Disabling data typed in the FTP User's password field
+*at selection-screen output.
+loop at screen.
+  if screen-name = 'PA_PSWRD'.
+    screen-invisible = '1'.
+    modify screen.
+  endif.
+endloop.
+
+write 'Completed....'.

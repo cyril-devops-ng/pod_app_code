@@ -1,0 +1,287 @@
+*&---------------------------------------------------------------------*
+*& Report  ZPOD_GET_TRANSPORTER_DELIVERY
+*&
+*&---------------------------------------------------------------------*
+*& Cyril.Sayeh.07066112584
+*&
+*&---------------------------------------------------------------------*
+
+REPORT  ZPOD_GET_TRANSPORTER_DELIVERY.
+data:
+      query_string type table of w3query,
+      html type table of w3html,
+      mime type table of w3mime.
+tables: kna1 , lips , likp.
+data kna1_l type kna1.
+data htmldoc like line of html.
+data count type i.
+data counter type i value 1.
+DATA: name TYPE STRING, _START TYPE STRING, _END TYPE STRING.
+data:
+       pa_user(30) type c,
+        pa_pswrd(30) type c ,
+        pa_host(64) type c,
+        pa_rfcds like rfcdes-rfcdest value 'SAPFTPA',
+
+      mi_key type i value 26101957,
+      mi_pwd_len type i ,
+      mi_handle type i.
+
+
+
+*  initialize ftp connection parameters
+move: 'cyril' to pa_user,
+    'password%%' to pa_pswrd,
+    '54.93.100.18' to pa_host
+*    '20160101'  to _start,
+*    sy-datum to _end.
+.
+
+parameters: b_date type sy-datum,
+e_date type sy-datum.
+
+data bstr type string.
+data estr type string.
+
+if b_date is initial.
+  move sy-datum+0(6) to bstr.
+  CONCATENATE bstr '01' into bstr.
+  move bstr to b_date.
+
+endif.
+
+
+*start
+*move '20160601' to b_date.
+
+if e_date is initial.
+*  move sy-datum+0(6) to estr.
+*  if sy-datum+4(2) eq '02'.
+*      CONCATENATE estr '28' into estr.
+*    else.
+*    if sy-datum+4(2) eq '09' or sy-datum+4(2) eq '04' or sy-datum+4(2) eq '06' or sy-datum+4(2) eq '11'.
+*      CONCATENATE estr '30' into estr.
+*      else.
+*        CONCATENATE estr '31' into estr.
+*    endif.
+
+*    endif.
+    MOVE SY-DATUM TO e_date.
+*  CONCATENATE estr '30' into estr.
+*  move estr to e_date.
+
+endif.
+
+data kunnr type kunnr.
+data podreturn type ZPOD_INFO_INTERFACE.
+data vbeln like likp-vbeln.
+data posnr like lips-posnr.
+data podtable type table of zpod_info_interface.
+data qty type string.
+data cts type string.
+data tabix type i.
+data tbs type string.
+data custname type kna1-NAME1.
+data lifnr type lifnr.
+move name to lifnr.
+
+
+move '{"results":[' to htmldoc-line.
+insert htmldoc into table html.
+data pdstk like vbuk-pdstk.
+data podat like likp-podat.
+data del_date like likp-podat.
+data potim like likp-potim.
+data cust like likp-kunnr.
+data matnr type matnr.
+data knumv like vbak-knumv.
+data kwert like konv-kwert.
+data amount type string.
+data so type VBELN_VA.
+data stras type string.
+data invoice like vbrk-vbeln.
+data custn type string.
+
+select  l~vbeln l~wadat l~podat l~potim l~kunnr v~pdstk ls~matnr into (vbeln,del_date,podat,potim,cust,pdstk,matnr)
+   from likp  as l  inner join vbuk as v on l~vbeln
+  = v~vbeln inner join lips as ls on l~vbeln = ls~vbeln
+  where  l~wadat <= e_date  and v~wbstk = 'C'
+  and l~wadat >= b_date and ls~matnr in
+   ('000000000000000001',
+  '000000000000000002',
+  '000000000000000003',
+  '000000000000000004') ORDER BY l~wadat DESCENDING.
+
+endselect.
+
+move sy-dbcnt to count.
+move count to cts.
+
+select  l~vbeln l~wadat l~podat l~potim l~kunnr v~pdstk ls~matnr into (vbeln,del_date,podat,potim,cust,pdstk,matnr)
+   from likp  as l  inner join vbuk as v on l~vbeln
+  = v~vbeln inner join lips as ls on l~vbeln = ls~vbeln
+  where  l~wadat <= e_date and v~wbstk = 'C'
+  and l~wadat >= b_date and ls~matnr in
+   ('000000000000000001',
+  '000000000000000002',
+  '000000000000000003',
+  '000000000000000004') ORDER BY l~wadat DESCENDING.
+  clear:
+  invoice,
+  knumv,
+  kwert,
+  podreturn,
+  amount.
+
+  select single name1 into custn from  kna1 where kunnr = cust.
+* get the sales order document.
+*select single vbelv into so from vbfa where vbeln = vbeln.
+
+*get the invoice
+  select single vbeln into invoice from vbfa where vbelv = vbeln and vbtyp_n = 'M'.
+
+*  get the condition record number
+*  select single knumv into knumv from vbak where vbeln = so.
+
+  select single knumv into knumv from vbrk where vbeln = invoice.
+
+*   get the amount accrued and
+  select single kwert into kwert from konv where knumv = knumv and kschl = 'PEF2'.
+
+  move kwert to amount.
+  move vbeln to podreturn-vbeln.
+  select single * from ZGANTRYINFO into CORRESPONDING FIELDS OF
+    podreturn where vbeln = podreturn-vbeln.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = podreturn-haulier
+    IMPORTING
+      OUTPUT = podreturn-haulier.
+
+
+  select single  name1 into podreturn-transporter from lfa1
+    where lifnr = podreturn-haulier.
+
+  select single lfimg into podreturn-quantity from lips where vbeln = podreturn-vbeln.
+  move podreturn-quantity to qty.
+  clear htmldoc-line.
+
+  if counter =  count .
+    CONCATENATE '' '{"vbeln":"' podreturn-vbeln
+*      '","posnr":"' podreturn-posnr
+    '","driver":"' podreturn-driver
+    '","quantity":"' qty
+    '","truckno":"' podreturn-truckno
+    '","lifnr":"' podreturn-haulier
+    '","transporter":"' podreturn-transporter
+    '","status":"' pdstk
+    '","pgi_date":"' del_date '"'
+    into htmldoc-line.
+    insert htmldoc into table html.
+    CONCATENATE
+    ',"cell_no":"' podreturn-cellno
+    '","pod_date":"' podat
+    '","pod_time":"' potim
+    '","customer":"' cust
+    '","cust_name":"' custn
+    '","amount":"' amount
+    '","matnr":"' matnr
+
+    '"}'
+    into htmldoc-line.
+  else.
+    CONCATENATE '' '{"vbeln":"' podreturn-vbeln
+*      '","posnr":"' podreturn-posnr
+   '","driver":"' podreturn-driver
+   '","quantity":"' qty
+   '","truckno":"' podreturn-truckno
+   '","lifnr":"' podreturn-haulier
+   '","transporter":"' podreturn-transporter
+   '","status":"' pdstk
+   '","pgi_date":"' del_date '"'
+   into htmldoc-line.
+    insert htmldoc into table html.
+    clear htmldoc-line.
+    CONCATENATE
+    ',"cell_no":"' podreturn-cellno
+    '","pod_date":"' podat
+    '","pod_time":"' potim
+    '","customer":"' cust
+    '","cust_name":"' custn
+    '","amount":"' amount
+    '","matnr":"' matnr
+   '"},'
+   into htmldoc-line.
+  endif.
+
+
+  insert htmldoc into table html.
+  add 1 to counter.
+endselect.
+
+
+
+move ']}' to htmldoc-line.
+insert htmldoc into table html.
+
+
+
+"FTP Communication Data Objects - [END]
+SET EXTENDED CHECK OFF.
+mi_pwd_len = STRLEN( pa_pswrd ).
+CALL FUNCTION 'HTTP_SCRAMBLE'"For Encrypting the Password
+  EXPORTING
+    SOURCE      = pa_pswrd
+    sourcelen   = mi_pwd_len
+    key         = mi_key
+  IMPORTING
+    destination = pa_pswrd.
+CALL FUNCTION 'FTP_CONNECT'"For connecting to the FTP Server's user directory
+     EXPORTING
+       user            = pa_user
+       password        = pa_pswrd
+       host            = pa_host
+       rfc_destination = pa_rfcds "Using the Background SAP FTP Library as part of the SAP backend System
+     IMPORTING
+       handle          = mi_handle
+     EXCEPTIONS
+       not_connected   = 1
+       OTHERS          = 2.
+IF sy-subrc = 0."When FTP connection established Successfully
+
+  DATA : path(58) ."Path that points to the FTP User's Home Directory
+  DATA:extension(5).
+  extension = '.json' .
+*  CONCATENATE '/json/sapr3/trans_deliveries_' b_date '_' e_date extension INTO path .
+  CONCATENATE '/json/sapr3/trans_deliveries' '' extension INTO path .
+  CALL FUNCTION 'FTP_R3_TO_SERVER'"For Creating a file from SAP R3 to FTP Server
+    EXPORTING
+      handle         = mi_handle
+      fname          = path
+      character_mode = 'X'
+    TABLES
+      text           = html"Final Internal table to be written to the text file in the FTP Server's Directory
+    EXCEPTIONS
+      tcpip_error    = 1
+      command_error  = 2
+      data_error     = 3
+      OTHERS         = 4.
+ELSE."When FTP connection Fails
+  WRITE: / 'Error in FTP Command'.
+ENDIF.
+CALL FUNCTION 'FTP_DISCONNECT'"For Disconnecting the connected FTP Session
+  EXPORTING
+    handle = mi_handle
+  EXCEPTIONS
+    OTHERS = 1.
+"For Disabling data typed in the FTP User's password field
+*at selection-screen output.
+loop at screen.
+  if screen-name = 'PA_PSWRD'.
+    screen-invisible = '1'.
+    modify screen.
+  endif.
+endloop.
+
+write 'Completed....'.

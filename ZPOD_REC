@@ -1,0 +1,52 @@
+report ZPOD_REC
+       no standard page heading line-size 255.
+
+parameters vbeln type vbeln.
+
+include bdcrecx1.
+
+start-of-selection.
+
+data mdate type string.
+data mtime type string.
+
+concatenate sy-uzeit+0(2) ':' sy-uzeit+2(2) ':' sy-uzeit+4(2) into mtime.
+data md type sy-datum.
+move sy-datum to mdate.
+CALL FUNCTION 'CONVERSION_EXIT_PDATE_OUTPUT'
+  EXPORTING
+    INPUT         = mdate
+ IMPORTING
+   OUTPUT        = mdate
+          .
+
+replace '.16' in mdate with '.2016' .
+
+perform open_group.
+
+perform bdc_dynpro      using 'SAPMV50A' '4006'.
+perform bdc_field       using 'BDC_CURSOR'
+                              'LIKP-VBELN'.
+perform bdc_field       using 'BDC_OKCODE'
+                              '/00'.
+perform bdc_field       using 'LIKP-VBELN'
+                               vbeln.
+perform bdc_dynpro      using 'SAPMV50A' '1000'.
+perform bdc_field       using 'BDC_OKCODE'
+                              '=PODQ'.
+perform bdc_field       using 'BDC_CURSOR'
+                              'TVPODVB-GRUND(01)'.
+perform bdc_field       using 'LIKP-PODAT'
+                              mdate.
+perform bdc_field       using 'LIKP-POTIM'
+                              mtime.
+perform bdc_dynpro      using 'SAPMV50A' '1000'.
+perform bdc_field       using 'BDC_OKCODE'
+                              '=SICH_T'.
+perform bdc_field       using 'BDC_CURSOR'
+                              'TVPODVB-GRUND(02)'.
+perform bdc_transaction using 'VLPOD'.
+
+perform close_group.
+
+perform createinvoice(zcreateinvoice) using 'C' vbeln.

@@ -1,0 +1,77 @@
+report ZPOD_DISPUTE
+       no standard page heading line-size 255.
+
+include bdcrecx1.
+
+start-of-selection.
+
+perform open_group.
+
+perform bdc_dynpro      using 'SAPMF05A' '0100'.
+perform bdc_field       using 'BDC_CURSOR'
+                              'RF05A-NEWKO'.
+perform bdc_field       using 'BDC_OKCODE'
+                              '/00'.
+perform bdc_field       using 'BKPF-BLDAT'
+                              '24.08.2016'.
+perform bdc_field       using 'BKPF-BLART'
+                              'SA'.
+perform bdc_field       using 'BKPF-BUKRS'
+                              'NG01'.
+perform bdc_field       using 'BKPF-BUDAT'
+                              '24.08.2016'.
+perform bdc_field       using 'BKPF-MONAT'
+                              '8'.
+perform bdc_field       using 'BKPF-WAERS'
+                              'NGN'.
+perform bdc_field       using 'BKPF-XBLNR'
+                              'SALES ORDER'.
+perform bdc_field       using 'BKPF-BKTXT'
+                              'SALES ORDER/CUSTOMER'.
+perform bdc_field       using 'FS006-DOCID'
+                              '*'.
+perform bdc_field       using 'RF05A-NEWBS'
+                              '40'.
+perform bdc_field       using 'RF05A-NEWKO'
+                              '12329001'.
+perform bdc_dynpro      using 'SAPMF05A' '0300'.
+perform bdc_field       using 'BDC_CURSOR'
+                              'RF05A-NEWKO'.
+perform bdc_field       using 'BDC_OKCODE'
+                              '/00'.
+perform bdc_field       using 'BSEG-WRBTR'
+                              '1000'.
+perform bdc_field       using 'RF05A-NEWBS'
+                              '50'.
+perform bdc_field       using 'RF05A-NEWKO'
+                              '12329000'.
+perform bdc_field       using 'DKACB-FMORE'
+                              'X'.
+perform bdc_dynpro      using 'SAPLKACB' '0002'.
+perform bdc_field       using 'BDC_CURSOR'
+                              'COBL-KDAUF'.
+perform bdc_field       using 'BDC_OKCODE'
+                              'ENTE'.
+perform bdc_field       using 'COBL-PRCTR'
+                              ''.
+perform bdc_field       using 'COBL-KDAUF'
+                              ''.
+perform bdc_dynpro      using 'SAPMF05A' '0300'.
+perform bdc_field       using 'BDC_CURSOR'
+                              'BSEG-SGTXT'.
+perform bdc_field       using 'BDC_OKCODE'
+                              '=BU'.
+perform bdc_field       using 'BSEG-WRBTR'
+                              '1000'.
+perform bdc_field       using 'BSEG-SGTXT'
+                              'DISPUTE ON DELIVERY NUMBER 9XXXXX'.
+perform bdc_field       using 'DKACB-FMORE'
+                              'X'.
+perform bdc_dynpro      using 'SAPLKACB' '0002'.
+perform bdc_field       using 'BDC_CURSOR'
+                              'COBL-KOSTL'.
+perform bdc_field       using 'BDC_OKCODE'
+                              '=ENTE'.
+perform bdc_transaction using 'FBB1'.
+
+perform close_group.
