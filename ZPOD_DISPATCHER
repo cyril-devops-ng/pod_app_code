@@ -1,0 +1,311 @@
+*&---------------------------------------------------------------------*
+*& Report  ZPOD_DISPATCHER
+*& @Catalyst_Code
+*& @Cyril Sayeh
+*& 07066112584
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+
+REPORT  ZPOD_DISPATCHER.
+tables: zpod_queue,likp,lips.
+
+
+include bdcrecx1.
+
+start-of-selection.
+
+  data mdate type string.
+  data mtime type string.
+  DATA FVAL TYPE STRING.
+  data ls_COMWA type VBCO6.
+  data ls_BFA_TAB type VBFA OCCURS 0 WITH HEADER LINE.
+  DATA LS_BFA LIKE LINE OF LS_BFA_TAB.
+
+  concatenate sy-uzeit+0(2) ':' sy-uzeit+2(2) ':' sy-uzeit+4(2) into mtime.
+  data md type sy-datum.
+  move sy-datum to mdate.
+  data shortage type tvpodvb-lfimg_diff.
+  CALL FUNCTION 'CONVERSION_EXIT_PDATE_OUTPUT'
+    EXPORTING
+      INPUT  = mdate
+    IMPORTING
+      OUTPUT = mdate.
+
+  replace '.16' in mdate with '.2016' .
+  replace '.17' in mdate with '.2017' .
+  replace '.18' in mdate with '.2018' .
+  replace '.19' in mdate with '.2019' .
+
+"Expires 2019
+
+
+
+  select single * from zpod_queue where status eq 'P'.
+
+  if zpod_queue is not initial.
+    move zpod_queue-shortage to shortage.
+    move shortage to fval.
+    if shortage eq '0'.
+*  just invoice no shortage.
+      perform open_group.
+
+      perform bdc_dynpro      using 'SAPMV50A' '4006'.
+      perform bdc_field       using 'BDC_CURSOR'
+                                    'LIKP-VBELN'.
+      perform bdc_field       using 'BDC_OKCODE'
+                                    '/00'.
+      perform bdc_field       using 'LIKP-VBELN'
+                                     zpod_queue-vbeln.
+      perform bdc_dynpro      using 'SAPMV50A' '1000'.
+      perform bdc_field       using 'BDC_OKCODE'
+                                    '=PODQ'.
+      perform bdc_field       using 'BDC_CURSOR'
+                                    'TVPODVB-GRUND(01)'.
+      perform bdc_field       using 'LIKP-PODAT'
+                                    mdate.
+      perform bdc_field       using 'LIKP-POTIM'
+                                    mtime.
+      perform bdc_dynpro      using 'SAPMV50A' '1000'.
+      perform bdc_field       using 'BDC_OKCODE'
+                                    '=SICH_T'.
+      perform bdc_field       using 'BDC_CURSOR'
+                                    'TVPODVB-GRUND(02)'.
+      perform bdc_transaction using 'VLPOD'.
+
+      perform close_group.
+
+      perform createinvoice(zcreateinvoice) using 'C' zpod_queue-vbeln.
+
+      update zpod_queue
+      set status = 'C'
+      where vbeln = zpod_queue-vbeln.
+    else.
+*    there is shortage
+      if zpod_queue-reason eq 'DFG1'.
+
+*      reason due to forte
+*      Perform POD
+        perform open_group.
+
+        perform bdc_dynpro      using 'SAPMV50A' '4006'.
+        perform bdc_field       using 'BDC_CURSOR'
+                                      'LIKP-VBELN'.
+        perform bdc_field       using 'BDC_OKCODE'
+                                      '/00'.
+        perform bdc_field       using 'LIKP-VBELN'
+                                      zpod_queue-vbeln.
+        perform bdc_dynpro      using 'SAPMV50A' '1000'.
+        perform bdc_field       using 'BDC_OKCODE'
+                                      '/00'.
+        perform bdc_field       using 'BDC_CURSOR'
+                                      'TVPODVB-LFIMG_DIFF(01)'.
+        perform bdc_field       using 'LIKP-PODAT'
+                                      mdate.
+        perform bdc_field       using 'LIKP-POTIM'
+                                      mtime.
+        perform bdc_field       using 'TVPODVB-GRUND(01)'
+                                      'DFG1'.
+        perform bdc_field       using 'TVPODVB-LFIMG_DIFF(01)'
+                                      fval.
+        perform bdc_dynpro      using 'SAPMV50A' '1000'.
+        perform bdc_field       using 'BDC_OKCODE'
+                                      '=PODQ'.
+        perform bdc_field       using 'BDC_CURSOR'
+                                      'TVPODVB-GRUND(02)'.
+        perform bdc_field       using 'LIKP-PODAT'
+                                      mdate.
+        perform bdc_field       using 'LIKP-POTIM'
+                                      mtime.
+        perform bdc_dynpro      using 'SAPMV50A' '1000'.
+        perform bdc_field       using 'BDC_OKCODE'
+                                      '=SICH_T'.
+        perform bdc_field       using 'BDC_CURSOR'
+                                      'TVPODVB-GRUND(02)'.
+        perform bdc_transaction using 'VLPOD'.
+
+        perform close_group.
+
+
+        select single * from likp where vbeln eq zpod_queue-vbeln.
+        select single * from lips where vbeln eq zpod_queue-vbeln.
+
+        "Sales order lips-vgbel.
+        ls_COMWA-vbeln = lips-vbeln.
+        ls_COMWA-posnr = lips-posnr.
+        CALL FUNCTION 'RV_ORDER_FLOW_INFORMATION'
+          EXPORTING
+            AUFBEREITUNG = '2'
+            BELEGTYP     = ' '
+            COMWA        = ls_COMWA
+            NACHFOLGER   = 'X'
+            N_STUFEN     = '50'
+            VORGAENGER   = 'X'
+            V_STUFEN     = '50'
+          TABLES
+            VBFA_TAB     = ls_BFA_TAB.
+        IF SY-SUBRC <> 0.
+* Implement suitable error handling here
+        ENDIF.
+
+        READ TABLE LS_BFA_TAB INTO LS_BFA WITH KEY VBTYP_N = 'C'.
+
+        data: unitP type p decimals 2,
+              shortageP type p decimals 2,
+              shortageP_Str type string.
+
+        unitP = ls_bfa-rfwrt / ls_bfa-rfmng.
+        shortageP = unitP * shortage.
+        move shortageP to shortageP_Str.
+*      perform chargetransporter(zcreateinvoice) using zpod_queue-vbeln lips-posnr lips-vgbel likp-lifnr zpod_queue-shortage .
+        perform createinvoice(zcreateinvoice) using 'C' zpod_queue-vbeln. "Create invoice
+
+        wait up to 3 seconds.
+        data so_cust type string.
+        data dis_del type string.
+        data period type string.
+        concatenate lips-vgbel '/' likp-kunnr into so_cust.
+        concatenate 'DISPUTE ON DELIVERY NUMBER' zpod_queue-vbeln into dis_del SEPARATED BY space.
+        move  mdate+3(2) to period.
+
+        "Create Journal for DFG1
+        perform open_group.
+
+        perform bdc_dynpro      using 'SAPMF05A' '0100'.
+        perform bdc_field       using 'BDC_CURSOR'
+                                      'RF05A-NEWKO'.
+        perform bdc_field       using 'BDC_OKCODE'
+                                      '/00'.
+        perform bdc_field       using 'BKPF-BLDAT'
+                                      mdate.
+        perform bdc_field       using 'BKPF-BLART'
+                                      'SA'.
+        perform bdc_field       using 'BKPF-BUKRS'
+                                      'NG01'.
+        perform bdc_field       using 'BKPF-BUDAT'
+                                      mdate.
+        perform bdc_field       using 'BKPF-MONAT'
+                                     period.
+        perform bdc_field       using 'BKPF-WAERS'
+                                      'NGN'.
+        perform bdc_field       using 'BKPF-XBLNR'
+                                      lips-vgbel.
+
+        perform bdc_field       using 'BKPF-BKTXT'
+                                     " 'SALES ORDER/CUSTOMER'.
+                                      so_cust.
+        perform bdc_field       using 'FS006-DOCID'
+                                      '*'.
+        perform bdc_field       using 'RF05A-NEWBS'
+                                      '40'.
+        perform bdc_field       using 'RF05A-NEWKO'
+                                      '12329001'.
+        perform bdc_dynpro      using 'SAPMF05A' '0300'.
+        perform bdc_field       using 'BDC_CURSOR'
+                                      'RF05A-NEWKO'.
+        perform bdc_field       using 'BDC_OKCODE'
+                                      '/00'.
+        perform bdc_field       using 'BSEG-WRBTR'
+                                      SHORTAGEP_STR.
+        perform bdc_field       using 'RF05A-NEWBS'
+                                      '50'.
+        perform bdc_field       using 'RF05A-NEWKO'
+                                      '12329000'.
+        perform bdc_field       using 'DKACB-FMORE'
+                                      'X'.
+        perform bdc_dynpro      using 'SAPLKACB' '0002'.
+        perform bdc_field       using 'BDC_CURSOR'
+                                      'COBL-KDAUF'.
+        perform bdc_field       using 'BDC_OKCODE'
+                                      'ENTE'.
+        perform bdc_field       using 'COBL-PRCTR'
+                                      ''.
+        perform bdc_field       using 'COBL-KDAUF'
+                                      ''.
+        perform bdc_dynpro      using 'SAPMF05A' '0300'.
+        perform bdc_field       using 'BDC_CURSOR'
+                                      'BSEG-SGTXT'.
+        perform bdc_field       using 'BDC_OKCODE'
+                                      '=BU'.
+        perform bdc_field       using 'BSEG-WRBTR'
+                                      SHORTAGEP_STR.
+        perform bdc_field       using 'BSEG-SGTXT'
+                                      "'DISPUTE ON DELIVERY NUMBER 9XXXXX'.
+                                       dis_del.
+        "'DISPUTE ON DELIVERY NUMBER 9XXXXX'.
+        perform bdc_field       using 'DKACB-FMORE'
+                                      'X'.
+        perform bdc_dynpro      using 'SAPLKACB' '0002'.
+        perform bdc_field       using 'BDC_CURSOR'
+                                      'COBL-KOSTL'.
+        perform bdc_field       using 'BDC_OKCODE'
+                                      '=ENTE'.
+        perform bdc_transaction using 'FBB1'.
+
+        perform close_group.
+        update zpod_queue
+       set status = 'C'
+       where vbeln = zpod_queue-vbeln.
+      else.
+*      reason due to transporter
+*          perform createinvoice(zcreateinvoice) using 'C' zpod_queue-vbeln. "Create invoice
+*
+*          wait up to 3 seconds.
+*          Perform POD
+        perform open_group.
+
+        perform bdc_dynpro      using 'SAPMV50A' '4006'.
+        perform bdc_field       using 'BDC_CURSOR'
+                                      'LIKP-VBELN'.
+        perform bdc_field       using 'BDC_OKCODE'
+                                      '/00'.
+        perform bdc_field       using 'LIKP-VBELN'
+                                      zpod_queue-vbeln.
+        perform bdc_dynpro      using 'SAPMV50A' '1000'.
+        perform bdc_field       using 'BDC_OKCODE'
+                                      '/00'.
+        perform bdc_field       using 'BDC_CURSOR'
+                                      'TVPODVB-LFIMG_DIFF(01)'.
+        perform bdc_field       using 'LIKP-PODAT'
+                                      mdate.
+        perform bdc_field       using 'LIKP-POTIM'
+                                      mtime.
+        perform bdc_field       using 'TVPODVB-GRUND(01)'
+                                      'DFG2'.
+        perform bdc_field       using 'TVPODVB-LFIMG_DIFF(01)'
+                                      fval.
+        perform bdc_dynpro      using 'SAPMV50A' '1000'.
+        perform bdc_field       using 'BDC_OKCODE'
+                                      '=PODQ'.
+        perform bdc_field       using 'BDC_CURSOR'
+                                      'TVPODVB-GRUND(02)'.
+        perform bdc_field       using 'LIKP-PODAT'
+                                      mdate.
+        perform bdc_field       using 'LIKP-POTIM'
+                                      mtime.
+        perform bdc_dynpro      using 'SAPMV50A' '1000'.
+        perform bdc_field       using 'BDC_OKCODE'
+                                      '=SICH_T'.
+        perform bdc_field       using 'BDC_CURSOR'
+                                      'TVPODVB-GRUND(02)'.
+        perform bdc_transaction using 'VLPOD'.
+
+        perform close_group.
+
+
+        select single * from likp where vbeln eq zpod_queue-vbeln.
+        select single * from lips where vbeln eq zpod_queue-vbeln.
+
+        wait up to 3 seconds.
+        perform chargetransporter(zcreateinvoice) using zpod_queue-vbeln lips-posnr lips-vgbel likp-lifnr shortage .
+
+        update zpod_queue
+       set status = 'C'
+       where vbeln = zpod_queue-vbeln.
+
+      endif.
+
+
+    endif.
+  endif.

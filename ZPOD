@@ -1,0 +1,43 @@
+*&---------------------------------------------------------------------*
+*& Report  ZPOD
+*&
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+
+REPORT  ZPOD.
+parameters: delivery type vbeln,
+            client type mandt.
+
+CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+  EXPORTING
+    INPUT  = delivery
+  IMPORTING
+    OUTPUT = delivery.
+
+
+update vbuk  CLIENT SPECIFIED
+set pdstk = 'C'
+where vbeln = delivery
+AND MANDT = client.
+
+if ( sy-subrc = 0 ).
+  update likp CLIENT SPECIFIED
+  set: podat = sy-datum,
+       potim = sy-UZEIT
+  where vbeln = delivery
+  and mandt = client.
+  if sy-subrc = 0.
+    update vbup CLIENT SPECIFIED
+    set PDSTA = 'C'
+    WHERE VBELN = DELIVERY
+    AND MANDT = CLIENT.
+
+    write 'POD performed successfully!'.
+  else.
+    write 'Failed to update POD date and time'.
+  endif.
+else.
+  write 'POD was not performed!'.
+endif.
