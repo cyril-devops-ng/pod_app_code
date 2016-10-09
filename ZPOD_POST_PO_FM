@@ -1,0 +1,677 @@
+FUNCTION ZPOD_POST_PO.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  TABLES
+*"      QUERY_STRING STRUCTURE  W3QUERY
+*"      HTML STRUCTURE  W3HTML
+*"      MIME STRUCTURE  W3MIME
+*"  CHANGING
+*"     REFERENCE(CONTENT_TYPE) LIKE  W3PARAM-CONT_TYPE DEFAULT
+*"       'application/json'
+*"     REFERENCE(CONTENT_LENGTH) LIKE  W3PARAM-CONT_LEN
+*"     REFERENCE(RETURN_CODE) LIKE  W3PARAM-RET_CODE
+*"----------------------------------------------------------------------
+  data: vend type string, name1 type string, name2 type string, name3 type string, name4 type string, name5 type string.
+  data temp type string.
+* fetch deliveries
+  SORT QUERY_STRING DESCENDING.
+  READ TABLE QUERY_STRING WITH KEY NAME = '_DEL1'.
+  name1 = QUERY_STRING-VALUE.
+  temp = name1.
+
+  READ TABLE QUERY_STRING WITH KEY NAME = '_DEL2'.
+  if temp ne query_string-value.
+  name2 = QUERY_STRING-VALUE.
+  temp = name2.
+  endif.
+
+  READ TABLE QUERY_STRING WITH KEY NAME = '_DEL3'.
+  if temp ne query_string-value.
+  name3 = QUERY_STRING-VALUE.
+  temp = name3.
+  endif.
+
+  READ TABLE QUERY_STRING WITH KEY NAME = '_DEL4'.
+  if temp ne query_string-value.
+  name4 = QUERY_STRING-VALUE.
+  temp = name4.
+  endif.
+
+
+  READ TABLE QUERY_STRING WITH KEY NAME = '_DEL5'.
+  if temp ne query_string-value.
+  name5 = QUERY_STRING-VALUE.
+  temp = name5.
+  endif.
+
+  READ TABLE QUERY_STRING WITH KEY NAME = '_VEND'.
+  vend = QUERY_STRING-VALUE.
+  data: vbeln1 type vbeln,
+        vbeln2 type vbeln,
+        vbeln3 type vbeln,
+        vbeln4 type vbeln,
+        vbeln5 type vbeln,
+        lifnr type lifnr,
+        qty like lips-lfimg ,
+        amount type string,
+        netpr type p decimals 3,
+        totalpr type p decimals 3,
+        itmtxt type string.
+  move:
+  name1 to vbeln1 , name2 to vbeln2 , name3 to vbeln3 , name4 to vbeln4 , name5 to vbeln5.
+
+  move vend to lifnr.
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = vbeln1
+    IMPORTING
+      OUTPUT = vbeln1.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = vbeln2
+    IMPORTING
+      OUTPUT = vbeln2.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = vbeln3
+    IMPORTING
+      OUTPUT = vbeln3.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = vbeln4
+    IMPORTING
+      OUTPUT = vbeln4.
+
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = vbeln5
+    IMPORTING
+      OUTPUT = vbeln5.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = lifnr
+    IMPORTING
+      OUTPUT = lifnr.
+
+  DATA: htmldoc LIKE LINE OF HTML.
+  move '{"results":[' to htmldoc-line.
+  insert htmldoc into table html.
+*===========================================================CREATE TRANSPORTER PO========================================================
+  DATA:
+        po_header like bapimepoheader,
+        po_headerx like bapimepoheaderx,
+        exppurchaseorder like bapimepoheader-po_number,
+        po_item like table of bapimepoitem with header line,
+        po_itemx like table of bapimepoitemx with header line,
+        POSCHEDULE  like table of BAPIMEPOSCHEDULE with header line,
+        POSCHEDULEX like table of BAPIMEPOSCHEDULX with header line,
+        POACCOUNT like table of BAPIMEPOACCOUNT with header line,
+        POACCOUNTX like table of BAPIMEPOACCOUNTX with header line,
+        BAPIRETURN LIKE TABLE OF BAPIRET2 WITH HEADER LINE.
+
+  po_header-COMP_CODE = 'NG01'.
+  po_header-DOC_TYPE = 'ZTRS'.
+  po_header-ITEM_INTVL = '00001'.
+  po_header-vendor = lifnr.
+  po_header-PMNTTRMS = '0001'.
+  po_header-PURCH_ORG = 'NG02'.
+  po_header-PUR_GROUP = '005'.
+  po_header-CURRENCY = 'NGN'.
+  po_header-CURRENCY_ISO = 'NGN'.
+
+
+  po_headerx-COMP_CODE = 'X'.
+  po_headerx-DOC_TYPE = 'X'.
+  po_headerx-ITEM_INTVL = 'X'.
+  po_headerx-vendor = 'X'.
+  po_headerx-PMNTTRMS = 'X'.
+  po_headerx-PURCH_ORG = 'X'.
+  po_headerx-PUR_GROUP = 'X'.
+  po_headerx-CURRENCY = 'X'.
+  po_headerx-CURRENCY_ISO ='X'.
+
+* perform additem
+* tables po_item po_itemx POSCHEDULE
+*         POSCHEDULEX POACCOUNT POACCOUNTX
+*         BAPIRETURN
+*
+* using vbeln1 '00001'.
+
+
+  po_item-PO_ITEM = '00001'.
+  concatenate 'WAYBILL #' VBELN1 INTO itmtxt.
+  move itmtxt to PO_ITEM-SHORT_TEXT.
+  PO_ITEM-PLANT = 'NG01'.
+  PO_ITEM-TRACKINGNO = VBELN1.
+  PO_ITEM-MATL_GROUP = '412'.
+  select single lfimg into qty from lips where vbeln = vbeln1.
+  move qty to po_item-QUANTITY.
+  po_item-po_unit = 'L'.
+  po_item-po_unit_iso = 'L'.
+  po_item-ORDERPR_UN = 'L'.
+  po_item-ORDERPR_UN_ISO = 'L'.
+  po_item-ITEM_CAT = '0'.
+  po_item-ACCTASSCAT = 'Z'.
+  PO_ITEM-TAX_CODE = 'I0'.
+
+  PERFORM GET_NET_VALUE USING vbeln1 AMOUNT.
+  move amount to totalpr.
+  move amount to netpr.
+  divide netpr by qty.
+  move netpr to po_item-NET_PRICE.
+
+  append po_item.
+
+
+  po_itemx-po_item = '00001'.
+  po_itemx-plant = 'X'.
+  po_itemx-trackingno = 'X'.
+  po_itemx-matl_group = 'X'.
+  po_itemx-quantity = 'X'.
+  po_itemx-po_unit = 'X'.
+  po_itemx-ORDERPR_UN = 'X'.
+  po_itemx-net_price = 'X'.
+  po_itemx-tax_code = 'X'.
+  po_itemx-item_cat = 'X'.
+  po_itemx-ACCTASSCAT = 'X'.
+  PO_ITEMX-SHORT_TEXT = 'X'.
+
+  append po_itemx.
+
+
+  poaccount-po_item = '00001'.
+  poaccount-serial_no = '01'.
+  poaccount-QUANTITY = qty.
+  poaccount-gl_account = '0041101300'.
+  poaccount-costcenter = '0900200001'.
+  poaccount-co_area = 'NG01'.
+  poaccount-net_value = totalpr.
+
+  append poaccount.
+
+
+  poaccountx-po_item = '00001'.
+  poaccountx-serial_no = '01'.
+  poaccountx-QUANTITY = 'X'.
+  poaccountx-gl_account = 'X'.
+  poaccountx-costcenter = 'X'.
+  poaccountx-co_area = 'X'.
+  poaccountx-net_value = 'X'.
+  append poaccountx.
+
+
+
+  POSCHEDULE-PO_ITEM = '00001'.
+  POSCHEDULE-SCHED_LINE = '0001'.
+  POSCHEDULE-DELIVERY_DATE = SY-DATUM.
+  POSCHEDULE-QUANTITY = QTY.
+
+  APPEND POSCHEDULE.
+
+  POSCHEDULEX-PO_ITEM = '00001'.
+  POSCHEDULEX-SCHED_LINE = '0001'.
+  POSCHEDULEX-DELIVERY_DATE = 'X'.
+  POSCHEDULEX-QUANTITY = 'X'.
+
+  APPEND POSCHEDULEX.
+
+
+  if name2 ne ''.
+     po_item-PO_ITEM = '00002'.
+  concatenate 'WAYBILL #' VBELN2 INTO itmtxt.
+  move itmtxt to PO_ITEM-SHORT_TEXT.
+  PO_ITEM-PLANT = 'NG01'.
+  PO_ITEM-TRACKINGNO = VBELN2.
+  PO_ITEM-MATL_GROUP = '412'.
+  select single lfimg into qty from lips where vbeln = vbeln2.
+  move qty to po_item-QUANTITY.
+  po_item-po_unit = 'L'.
+  po_item-po_unit_iso = 'L'.
+  po_item-ORDERPR_UN = 'L'.
+  po_item-ORDERPR_UN_ISO = 'L'.
+  po_item-ITEM_CAT = '0'.
+  po_item-ACCTASSCAT = 'Z'.
+  PO_ITEM-TAX_CODE = 'I0'.
+
+  PERFORM GET_NET_VALUE USING vbeln2 AMOUNT.
+  move amount to totalpr.
+  move amount to netpr.
+  divide netpr by qty.
+  move netpr to po_item-NET_PRICE.
+
+  append po_item.
+
+
+  po_itemx-po_item = '00002'.
+  po_itemx-plant = 'X'.
+  po_itemx-trackingno = 'X'.
+  po_itemx-matl_group = 'X'.
+  po_itemx-quantity = 'X'.
+  po_itemx-po_unit = 'X'.
+  po_itemx-ORDERPR_UN = 'X'.
+  po_itemx-net_price = 'X'.
+  po_itemx-tax_code = 'X'.
+  po_itemx-item_cat = 'X'.
+  po_itemx-ACCTASSCAT = 'X'.
+  PO_ITEMX-SHORT_TEXT = 'X'.
+
+  append po_itemx.
+
+
+  poaccount-po_item = '00002'.
+  poaccount-serial_no = '01'.
+  poaccount-QUANTITY = qty.
+  poaccount-gl_account = '0041101300'.
+  poaccount-costcenter = '0900200001'.
+  poaccount-co_area = 'NG01'.
+  poaccount-net_value = totalpr.
+
+  append poaccount.
+
+
+  poaccountx-po_item = '00002'.
+  poaccountx-serial_no = '01'.
+  poaccountx-QUANTITY = 'X'.
+  poaccountx-gl_account = 'X'.
+  poaccountx-costcenter = 'X'.
+  poaccountx-co_area = 'X'.
+  poaccountx-net_value = 'X'.
+  append poaccountx.
+
+
+
+  POSCHEDULE-PO_ITEM = '00002'.
+  POSCHEDULE-SCHED_LINE = '0001'.
+  POSCHEDULE-DELIVERY_DATE = SY-DATUM.
+  POSCHEDULE-QUANTITY = QTY.
+
+  APPEND POSCHEDULE.
+
+  POSCHEDULEX-PO_ITEM = '00002'.
+  POSCHEDULEX-SCHED_LINE = '0001'.
+  POSCHEDULEX-DELIVERY_DATE = 'X'.
+  POSCHEDULEX-QUANTITY = 'X'.
+
+  APPEND POSCHEDULEX.
+
+  endif.
+
+
+  if name3 ne ''.
+       po_item-PO_ITEM = '00003'.
+  concatenate 'WAYBILL #' VBELN3 INTO itmtxt.
+  move itmtxt to PO_ITEM-SHORT_TEXT.
+  PO_ITEM-PLANT = 'NG01'.
+  PO_ITEM-TRACKINGNO = VBELN3.
+  PO_ITEM-MATL_GROUP = '412'.
+  select single lfimg into qty from lips where vbeln = vbeln3.
+  move qty to po_item-QUANTITY.
+  po_item-po_unit = 'L'.
+  po_item-po_unit_iso = 'L'.
+  po_item-ORDERPR_UN = 'L'.
+  po_item-ORDERPR_UN_ISO = 'L'.
+  po_item-ITEM_CAT = '0'.
+  po_item-ACCTASSCAT = 'Z'.
+  PO_ITEM-TAX_CODE = 'I0'.
+
+  PERFORM GET_NET_VALUE USING vbeln3 AMOUNT.
+  move amount to totalpr.
+  move amount to netpr.
+  divide netpr by qty.
+  move netpr to po_item-NET_PRICE.
+
+  append po_item.
+
+
+  po_itemx-po_item = '00003'.
+  po_itemx-plant = 'X'.
+  po_itemx-trackingno = 'X'.
+  po_itemx-matl_group = 'X'.
+  po_itemx-quantity = 'X'.
+  po_itemx-po_unit = 'X'.
+  po_itemx-ORDERPR_UN = 'X'.
+  po_itemx-net_price = 'X'.
+  po_itemx-tax_code = 'X'.
+  po_itemx-item_cat = 'X'.
+  po_itemx-ACCTASSCAT = 'X'.
+  PO_ITEMX-SHORT_TEXT = 'X'.
+
+  append po_itemx.
+
+
+  poaccount-po_item = '00003'.
+  poaccount-serial_no = '01'.
+  poaccount-QUANTITY = qty.
+  poaccount-gl_account = '0041101300'.
+  poaccount-costcenter = '0900200001'.
+  poaccount-co_area = 'NG01'.
+  poaccount-net_value = totalpr.
+
+  append poaccount.
+
+
+  poaccountx-po_item = '00003'.
+  poaccountx-serial_no = '01'.
+  poaccountx-QUANTITY = 'X'.
+  poaccountx-gl_account = 'X'.
+  poaccountx-costcenter = 'X'.
+  poaccountx-co_area = 'X'.
+  poaccountx-net_value = 'X'.
+  append poaccountx.
+
+
+
+  POSCHEDULE-PO_ITEM = '00003'.
+  POSCHEDULE-SCHED_LINE = '0001'.
+  POSCHEDULE-DELIVERY_DATE = SY-DATUM.
+  POSCHEDULE-QUANTITY = QTY.
+
+  APPEND POSCHEDULE.
+
+  POSCHEDULEX-PO_ITEM = '00003'.
+  POSCHEDULEX-SCHED_LINE = '0001'.
+  POSCHEDULEX-DELIVERY_DATE = 'X'.
+  POSCHEDULEX-QUANTITY = 'X'.
+
+  APPEND POSCHEDULEX.
+
+  endif.
+
+
+  if name4 ne ''.
+       po_item-PO_ITEM = '00004'.
+  concatenate 'WAYBILL #' VBELN4 INTO itmtxt.
+  move itmtxt to PO_ITEM-SHORT_TEXT.
+  PO_ITEM-PLANT = 'NG01'.
+  PO_ITEM-TRACKINGNO = VBELN4.
+  PO_ITEM-MATL_GROUP = '412'.
+  select single lfimg into qty from lips where vbeln = vbeln4.
+  move qty to po_item-QUANTITY.
+  po_item-po_unit = 'L'.
+  po_item-po_unit_iso = 'L'.
+  po_item-ORDERPR_UN = 'L'.
+  po_item-ORDERPR_UN_ISO = 'L'.
+  po_item-ITEM_CAT = '0'.
+  po_item-ACCTASSCAT = 'Z'.
+  PO_ITEM-TAX_CODE = 'I0'.
+
+  PERFORM GET_NET_VALUE USING vbeln4 AMOUNT.
+  move amount to totalpr.
+  move amount to netpr.
+  divide netpr by qty.
+  move netpr to po_item-NET_PRICE.
+
+  append po_item.
+
+
+  po_itemx-po_item = '00004'.
+  po_itemx-plant = 'X'.
+  po_itemx-trackingno = 'X'.
+  po_itemx-matl_group = 'X'.
+  po_itemx-quantity = 'X'.
+  po_itemx-po_unit = 'X'.
+  po_itemx-ORDERPR_UN = 'X'.
+  po_itemx-net_price = 'X'.
+  po_itemx-tax_code = 'X'.
+  po_itemx-item_cat = 'X'.
+  po_itemx-ACCTASSCAT = 'X'.
+  PO_ITEMX-SHORT_TEXT = 'X'.
+
+  append po_itemx.
+
+
+  poaccount-po_item = '00004'.
+  poaccount-serial_no = '01'.
+  poaccount-QUANTITY = qty.
+  poaccount-gl_account = '0041101300'.
+  poaccount-costcenter = '0900200001'.
+  poaccount-co_area = 'NG01'.
+  poaccount-net_value = totalpr.
+
+  append poaccount.
+
+
+  poaccountx-po_item = '00004'.
+  poaccountx-serial_no = '01'.
+  poaccountx-QUANTITY = 'X'.
+  poaccountx-gl_account = 'X'.
+  poaccountx-costcenter = 'X'.
+  poaccountx-co_area = 'X'.
+  poaccountx-net_value = 'X'.
+  append poaccountx.
+
+
+
+  POSCHEDULE-PO_ITEM = '00004'.
+  POSCHEDULE-SCHED_LINE = '0001'.
+  POSCHEDULE-DELIVERY_DATE = SY-DATUM.
+  POSCHEDULE-QUANTITY = QTY.
+
+  APPEND POSCHEDULE.
+
+  POSCHEDULEX-PO_ITEM = '00004'.
+  POSCHEDULEX-SCHED_LINE = '0001'.
+  POSCHEDULEX-DELIVERY_DATE = 'X'.
+  POSCHEDULEX-QUANTITY = 'X'.
+
+  APPEND POSCHEDULEX.
+
+  endif.
+
+
+  if name5 ne ''.
+       po_item-PO_ITEM = '00005'.
+  concatenate 'WAYBILL #' VBELN5 INTO itmtxt.
+  move itmtxt to PO_ITEM-SHORT_TEXT.
+  PO_ITEM-PLANT = 'NG01'.
+  PO_ITEM-TRACKINGNO = VBELN5.
+  PO_ITEM-MATL_GROUP = '412'.
+  select single lfimg into qty from lips where vbeln = vbeln5.
+  move qty to po_item-QUANTITY.
+  po_item-po_unit = 'L'.
+  po_item-po_unit_iso = 'L'.
+  po_item-ORDERPR_UN = 'L'.
+  po_item-ORDERPR_UN_ISO = 'L'.
+  po_item-ITEM_CAT = '0'.
+  po_item-ACCTASSCAT = 'Z'.
+  PO_ITEM-TAX_CODE = 'I0'.
+
+  PERFORM GET_NET_VALUE USING vbeln5 AMOUNT.
+  move amount to totalpr.
+  move amount to netpr.
+  divide netpr by qty.
+  move netpr to po_item-NET_PRICE.
+
+  append po_item.
+
+
+  po_itemx-po_item = '00005'.
+  po_itemx-plant = 'X'.
+  po_itemx-trackingno = 'X'.
+  po_itemx-matl_group = 'X'.
+  po_itemx-quantity = 'X'.
+  po_itemx-po_unit = 'X'.
+  po_itemx-ORDERPR_UN = 'X'.
+  po_itemx-net_price = 'X'.
+  po_itemx-tax_code = 'X'.
+  po_itemx-item_cat = 'X'.
+  po_itemx-ACCTASSCAT = 'X'.
+  PO_ITEMX-SHORT_TEXT = 'X'.
+
+  append po_itemx.
+
+
+  poaccount-po_item = '00005'.
+  poaccount-serial_no = '01'.
+  poaccount-QUANTITY = qty.
+  poaccount-gl_account = '0041101300'.
+  poaccount-costcenter = '0900200001'.
+  poaccount-co_area = 'NG01'.
+  poaccount-net_value = totalpr.
+
+  append poaccount.
+
+
+  poaccountx-po_item = '00005'.
+  poaccountx-serial_no = '01'.
+  poaccountx-QUANTITY = 'X'.
+  poaccountx-gl_account = 'X'.
+  poaccountx-costcenter = 'X'.
+  poaccountx-co_area = 'X'.
+  poaccountx-net_value = 'X'.
+  append poaccountx.
+
+
+
+  POSCHEDULE-PO_ITEM = '00005'.
+  POSCHEDULE-SCHED_LINE = '0001'.
+  POSCHEDULE-DELIVERY_DATE = SY-DATUM.
+  POSCHEDULE-QUANTITY = QTY.
+
+  APPEND POSCHEDULE.
+
+  POSCHEDULEX-PO_ITEM = '00005'.
+  POSCHEDULEX-SCHED_LINE = '0001'.
+  POSCHEDULEX-DELIVERY_DATE = 'X'.
+  POSCHEDULEX-QUANTITY = 'X'.
+
+  APPEND POSCHEDULEX.
+  endif.
+
+
+
+
+
+
+  CALL FUNCTION 'BAPI_PO_CREATE1'
+    EXPORTING
+      POHEADER               = po_header
+      POHEADERX              = po_headerx
+*      POADDRVENDOR           = TESTRUN
+*      =
+*      MEMORY_UNCOMPLETE      = MEMORY_COMPLETE
+*      =
+*      POEXPIMPHEADER         = POEXPIMPHEADERX
+*      =
+*      VERSIONS               = NO_MESSAGING
+*      =
+*      NO_MESSAGE_REQ         = NO_AUTHORITY
+*      =
+*      NO_PRICE_FROM_PO       = PARK_COMPLETE
+*      =
+*      PARK_UNCOMPLETE        =
+       IMPORTING
+      EXPPURCHASEORDER       = exppurchaseorder
+*      EXPHEADER              = EXPPOEXPIMPHEADER
+*      =
+
+    TABLES
+      RETURN                 = bapireturn
+      POITEM                 = po_item
+      POITEMX                = po_itemx
+*      POADDRDELIVERY         =
+      POSCHEDULE =      poschedule
+      POSCHEDULEX            = poschedulex
+      POACCOUNT              = poaccount
+*      POACCOUNTPROFITSEGMENT =
+      POACCOUNTX      =      poaccountx
+*      POCONDHEADER           = POCONDHEADERX
+*      =
+*      POCOND                 = POCONDX
+*      =
+*      POLIMITS               = POCONTRACTLIMITS
+*      =
+*      POSERVICES             = POSRVACCESSVALUES
+*      =
+*      POSERVICESTEXT         = EXTENSIONIN
+*      =
+*      EXTENSIONOUT           = POEXPIMPITEM
+*      =
+*      POEXPIMPITEMX          = POTEXTHEADER
+*      =
+*      POTEXTITEM             = ALLVERSIONS
+*      =
+*      POPARTNER              = POCOMPONENTS
+*      =
+*      POCOMPONENTSX          = POSHIPPING
+*      =
+*      POSHIPPINGX            = POSHIPPINGEXP
+*      =
+*      SERIALNUMBER           = SERIALNUMBERX
+*      =
+*      INVPLANHEADER          = INVPLANHEADERX
+*      =
+*      INVPLANITEM            = INVPLANITEMX
+*      =
+      .
+
+
+
+
+
+
+  data counter type i value 1.
+  data count type i value 0.
+  loop at bapireturn .
+    if bapireturn-type = 'S' and bapireturn-id ='06' and bapireturn-number = '017'.
+
+      add 1 to count.
+    endif.
+  endloop.
+
+
+  loop at bapireturn .
+    if bapireturn-type = 'S' and bapireturn-id ='06' and bapireturn-number = '017'.
+      if counter = count.
+        concatenate '' '{"po_number":"' bapireturn-message_v2 '","msg":"' bapireturn-message '"}' into htmldoc-line.
+      else.
+        concatenate '' '{"po_number":"' bapireturn-message_v2 '","msg":"' bapireturn-message '"},' into htmldoc-line.
+
+      endif.
+
+      insert htmldoc into table html.
+      add 1 to counter.
+    endif.
+  endloop.
+
+  move ']}' to htmldoc-line.
+  insert htmldoc into table html.
+
+
+  CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+* EXPORTING
+*   WAIT          =
+* IMPORTING
+*   RETURN        =
+            .
+
+
+ENDFUNCTION.
+
+FORM GET_NET_VALUE USING del TYPE VBELN AMOUNT TYPE STRING.
+  data knumv like vbak-knumv.
+  data kwert like konv-kwert.
+  data vbeln type vbeln.
+  data invoice like vbrk-vbeln.
+
+
+  move del to vbeln.
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = vbeln
+    IMPORTING
+      OUTPUT = vbeln.
+
+  select single vbeln into invoice from vbfa where vbelv = vbeln and vbtyp_n = 'M'.
+  select single knumv into knumv from vbrk where vbeln = invoice.
+  select single kwert into kwert from konv where knumv = knumv and kschl = 'PEF2'.
+
+  move kwert to amount.
+
+
+ENDFORM.

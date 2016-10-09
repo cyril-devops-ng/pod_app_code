@@ -1,0 +1,45 @@
+FUNCTION ZPOD_GET_TRANSPORTERS .
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  TABLES
+*"      QUERY_STRING STRUCTURE  W3QUERY
+*"      HTML STRUCTURE  W3HTML
+*"      MIME STRUCTURE  W3MIME
+*"  CHANGING
+*"     REFERENCE(CONTENT_TYPE) LIKE  W3PARAM-CONT_TYPE DEFAULT
+*"       'application/json'
+*"     REFERENCE(CONTENT_LENGTH) LIKE  W3PARAM-CONT_LEN
+*"     REFERENCE(RETURN_CODE) LIKE  W3PARAM-RET_CODE
+*"----------------------------------------------------------------------
+
+
+tables lfa1.
+data htmldoc like line of html.
+data count type i.
+data counter type i value 1.
+data name type string.
+data stras type string.
+move '{"result":[' to htmldoc-line.
+insert htmldoc into table html.
+select * from lfa1 where ktokk in ('ZGUR','003').
+endselect.
+move sy-dbcnt to count.
+
+select * from lfa1 where ktokk in ('ZGUR','003').
+move lfa1-name1 to name.
+CONCATENATE lfa1-stras ',' lfa1-ort01 into stras SEPARATED BY space.
+REPLACE all OCCURRENCES OF '"'  in name with ''.
+REPLACE all OCCURRENCES OF ','  in name with ''.
+if counter = count.
+    concatenate '{"cust_id":"' lfa1-lifnr '","cust_name":"' name '","stras":"' stras '"}' into htmldoc-line.
+  else.
+    concatenate '{"cust_id":"' lfa1-lifnr '","cust_name":"' name '","stras":"' stras '"},' into htmldoc-line.
+    endif.
+    insert htmldoc into table html.
+    add 1 to counter.
+endselect.
+
+move ']}' to htmldoc-line.
+insert htmldoc into table html.
+
+ENDFUNCTION.

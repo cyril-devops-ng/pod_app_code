@@ -1,0 +1,79 @@
+FUNCTION ZPOD_GET_INVENTORY.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  TABLES
+*"      QUERY_STRING STRUCTURE  W3QUERY
+*"      HTML STRUCTURE  W3HTML
+*"      MIME STRUCTURE  W3MIME
+*"  CHANGING
+*"     REFERENCE(CONTENT_TYPE) LIKE  W3PARAM-CONT_TYPE DEFAULT
+*"       'application/json'
+*"     REFERENCE(CONTENT_LENGTH) LIKE  W3PARAM-CONT_LEN
+*"     REFERENCE(RETURN_CODE) LIKE  W3PARAM-RET_CODE
+*"----------------------------------------------------------------------
+tables: mard.
+
+data: matnr type matnr,
+      werks type werks_d,
+      lgort type lgort_d,
+      labst type labst,
+      lab type string.
+
+data count type i.
+data counter type i value 1.
+data plantname type string.
+data storename type string.
+data name1 type string.
+data ort01 type string.
+
+
+  DATA: htmldoc LIKE LINE OF HTML.
+  move '{"results":[' to htmldoc-line.
+  insert htmldoc into table html.
+
+
+select * from mard where matnr eq '000000000000000001' or  matnr eq '000000000000000002' or
+   matnr eq '000000000000000003' or  matnr eq '000000000000000004'.
+
+  endselect.
+
+  move sy-DBCNT to count.
+
+select * from mard where matnr eq '000000000000000001' or  matnr eq '000000000000000002' or
+   matnr eq '000000000000000003' or  matnr eq '000000000000000004'.
+
+  select single name1 ort01 into (name1,ort01) from t001w where werks = mard-werks.
+    concatenate name1 ', ' ort01 into plantname.
+    select single lgobe into storename from t001l where werks = mard-werks and lgort = mard-lgort.
+  if counter = count.
+  move mard-labst to lab.
+CONCATENATE '' '{"matnr":"' mard-matnr
+*      '","posnr":"' podreturn-posnr
+      '","werks":"' mard-werks
+      '","lgort":"' mard-lgort
+      '","plantname":"' plantname
+      '","storename":"' storename
+      '","labst":"' lab
+
+      '"}'
+      into htmldoc-line.
+    else.
+      move mard-labst to lab.
+      CONCATENATE '' '{"matnr":"' mard-matnr
+*      '","posnr":"' podreturn-posnr
+      '","werks":"' mard-werks
+      '","lgort":"' mard-lgort
+      '","plantname":"' plantname
+      '","storename":"' storename
+      '","labst":"' lab
+
+     '"},'
+     into htmldoc-line.
+    endif.
+
+    insert htmldoc into table html.
+     add 1 to counter.
+  endselect.
+ move ']}' to htmldoc-line.
+  insert htmldoc into table html.
+ENDFUNCTION.

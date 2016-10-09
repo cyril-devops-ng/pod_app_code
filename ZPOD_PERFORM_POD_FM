@@ -1,0 +1,91 @@
+FUNCTION ZPOD_PERFORM_POD.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  TABLES
+*"      QUERY_STRING STRUCTURE  W3QUERY
+*"      HTML STRUCTURE  W3HTML
+*"      MIME STRUCTURE  W3MIME
+*"  CHANGING
+*"     REFERENCE(CONTENT_TYPE) LIKE  W3PARAM-CONT_TYPE DEFAULT
+*"       'application/json'
+*"     REFERENCE(CONTENT_LENGTH) LIKE  W3PARAM-CONT_LEN
+*"     REFERENCE(RETURN_CODE) LIKE  W3PARAM-RET_CODE
+*"----------------------------------------------------------------------
+
+DATA: name TYPE STRING,
+      qtydiff type string,
+      reason type string,
+      trans_type type string,
+      status type string.
+
+DATA delivery type vbeln.
+  SORT QUERY_STRING DESCENDING.
+  READ TABLE QUERY_STRING WITH KEY NAME = '_DELNO'.
+  name = QUERY_STRING-VALUE.
+
+  READ TABLE QUERY_STRING WITH KEY NAME = '_QTYDIFF'.
+  qtydiff = QUERY_STRING-VALUE.
+
+   READ TABLE QUERY_STRING WITH KEY NAME = 'REASON'.
+  reason = QUERY_STRING-VALUE.
+
+  data zpod_q type zpod_queue.
+
+
+
+  move 'P' to status.
+  move 'POD' to trans_type.
+  move name to delivery.
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = delivery
+    IMPORTING
+      OUTPUT = delivery.
+
+*  DATA: htmldoc LIKE LINE OF HTML.
+
+move delivery to zpod_q-vbeln.
+move qtydiff to zpod_q-shortage.
+move '' to zpod_q-invoice_no.
+move trans_type to zpod_q-trans_type.
+move status to zpod_q-status.
+move reason to zpod_q-reason.
+
+
+insert ZPOD_QUEUE from zpod_q.
+
+*commit work.
+
+
+*  update vbuk
+*  set pdstk = 'C'
+*  where vbeln = delivery
+*  .
+*
+*if ( sy-subrc = 0 ).
+*  update likp
+*  set: podat = sy-datum,
+*       potim = sy-UZEIT,
+*       AENAM = 'PPMS_USER'
+*  where vbeln = delivery
+*  .
+*  if sy-subrc = 0.
+*    commit work.
+*    update vbup
+*    set PDSTA = 'C'
+*    WHERE VBELN = DELIVERY
+*    .
+*
+*    commit work.
+*    move '{"results":["Success"]}' to htmldoc-line.
+*  else.
+*    move '{"results":["Failure to update POD date and time"]}' to htmldoc-line.
+*  endif.
+*else.
+*    move '{"results":["Failed to perform POD"]}' to htmldoc-line.
+*endif.
+*
+*INSERT htmldoc into table html.
+
+
+ENDFUNCTION.

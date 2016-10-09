@@ -1,0 +1,71 @@
+FUNCTION ZPOD_GET_CUSTOMERS.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  TABLES
+*"      QUERY_STRING STRUCTURE  W3QUERY
+*"      HTML STRUCTURE  W3HTML
+*"      MIME STRUCTURE  W3MIME
+*"  CHANGING
+*"     REFERENCE(CONTENT_TYPE) LIKE  W3PARAM-CONT_TYPE DEFAULT
+*"       'application/json'
+*"     REFERENCE(CONTENT_LENGTH) LIKE  W3PARAM-CONT_LEN
+*"     REFERENCE(RETURN_CODE) LIKE  W3PARAM-RET_CODE
+*"----------------------------------------------------------------------
+
+tables: kna1 , lips , likp.
+data kna1_l type kna1.
+data htmldoc like line of html.
+data count type i.
+data counter type i value 1.
+data name type string.
+data stras type string.
+data: pms type string, atk type string, ago type string, dpk type string.
+move '{"result":[' to htmldoc-line.
+insert htmldoc into table html.
+select * from kna1.
+endselect.
+move sy-dbcnt to count.
+
+select * from kna1.
+move kna1-name1 to name.
+pms = 'false'.
+atk = 'false'.
+ago = 'false'.
+dpk = 'false'.
+concatenate kna1-stras ',' kna1-ort01 into stras SEPARATED BY space.
+REPLACE all OCCURRENCES OF '"'  in name with ''.
+REPLACE all OCCURRENCES OF ','  in name with ''.
+concatenate kna1-stras ',' kna1-ort01 into stras SEPARATED BY space.
+*select * from likp where kunnr = kna1-kunnr and lfdat >= '20160101' and lfdat <= sy-datum .
+*  select * from lips where vbeln = likp-vbeln.
+*  if lips-matnr = '000000000000000001' and pms eq 'false'.
+*     pms = 'true'.
+*    endif.
+*   if lips-matnr = '000000000000000002' and atk eq 'false'.
+*    atk = 'true'.
+*    endif.
+*    if lips-matnr = '000000000000000003' and ago eq 'false'.
+*    ago = 'true'.
+*    endif.
+*    if lips-matnr = '000000000000000004' and dpk eq 'false'.
+*    dpk = 'true'.
+*    endif.
+*    endselect.
+*
+*
+*
+*
+*  endselect.
+if counter = count.
+    concatenate '{"cust_id":"' kna1-kunnr '","cust_name":"' name '","address":"' stras '","pms":"' pms ' ","atk":"' atk '","ago":"' ago '","dpk":"' dpk '"}' into htmldoc-line.
+  else.
+    concatenate '{"cust_id":"' kna1-kunnr '","cust_name":"' name '","address":"' stras '","pms":"' pms ' ","atk":"' atk '","ago":"' ago '","dpk":"' dpk '"},' into htmldoc-line.
+    endif.
+    insert htmldoc into table html.
+    add 1 to counter.
+endselect.
+
+move ']}' to htmldoc-line.
+insert htmldoc into table html.
+
+ENDFUNCTION.

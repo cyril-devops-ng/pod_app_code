@@ -1,0 +1,206 @@
+FUNCTION ZPOD_GET_ALL_DELIVERIES.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  TABLES
+*"      QUERY_STRING STRUCTURE  W3QUERY
+*"      HTML STRUCTURE  W3HTML
+*"      MIME STRUCTURE  W3MIME
+*"  CHANGING
+*"     REFERENCE(CONTENT_TYPE) LIKE  W3PARAM-CONT_TYPE DEFAULT
+*"       'application/json'
+*"     REFERENCE(CONTENT_LENGTH) LIKE  W3PARAM-CONT_LEN
+*"     REFERENCE(RETURN_CODE) LIKE  W3PARAM-RET_CODE
+*"----------------------------------------------------------------------
+  DATA: name TYPE STRING, _START TYPE STRING, _END TYPE STRING.
+  SORT QUERY_STRING DESCENDING.
+  READ TABLE QUERY_STRING WITH KEY NAME = '_CUSTNO'.
+  name = QUERY_STRING-VALUE.
+
+  read table query_string with key name = '_START'.
+  _start = query_string-value.
+
+  read table query_string with key name = '_END'.
+  _end = query_string-value.
+
+
+  data b_date type sy-datum.
+  data e_date type sy-datum.
+
+
+  move _start to b_date.
+  move _end to e_date.
+
+  data kunnr type kunnr.
+  data podreturn type ZPOD_INFO_INTERFACE.
+  data vbeln like likp-vbeln.
+  data posnr like lips-posnr.
+  data podtable type table of zpod_info_interface.
+  data qty type string.
+  data cts type string.
+  data tabix type i.
+  data tbs type string.
+  data custname type kna1-NAME1.
+
+
+  move name to kunnr.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = kunnr
+    IMPORTING
+      OUTPUT = kunnr.
+
+
+
+* to return keys vbeln driver quantity truckno transporter
+
+  DATA: htmldoc LIKE LINE OF HTML.
+  move '{"results":[' to htmldoc-line.
+  insert htmldoc into table html.
+
+
+  data count type i.
+  data counter type i value 1.
+  data podat like likp-podat.
+  data del_date like likp-podat.
+  data potim like likp-potim.
+  data cust like likp-kunnr.
+  data matnr type matnr.
+  data cust_name type string.
+  data address type string.
+  data cellno type string.
+  data contactname type string.
+  data contactno type string.
+  data: headedto type string , headedfrom type string, route type string, zone type string, vtext1 type string, vtext2 type string,rt type string.
+  select l~vbeln l~wadat l~podat l~potim l~kunnr into (vbeln,del_date,podat,potim,cust) from likp  as l  inner join vbuk as v on l~vbeln
+    = v~vbeln where v~wbstk = 'C' and l~wadat <= e_date and l~wadat >= b_date.
+
+  endselect.
+
+  move sy-dbcnt to count.
+  move count to cts.
+
+*  select single name1 into custname from  kna1 where kunnr = kunnr.
+*
+*  if count > 0.
+*    concatenate '{"cust_name":"' custname '"},' into htmldoc-line.
+*  else.
+*    concatenate '{"cust_name":"' custname '"}' into htmldoc-line.
+*  endif.
+*  insert htmldoc into table html.
+
+
+  select l~vbeln l~wadat l~podat l~potim l~kunnr l~ablad l~route l~vstel into (vbeln,del_date,podat,potim,cust,headedto,rt,headedfrom) from likp  as l  inner join vbuk as v on l~vbeln
+    = v~vbeln where v~wbstk = 'C' and l~wadat <= e_date and l~wadat >= b_date.
+
+
+    select single bezei from TVROT into route where route eq rt and spras Eq 'E'.
+    select single vtext from tvstt into vtext1 where vstel eq headedfrom.
+    CONCATENATE headedfrom ': ' vtext1 into vtext1.
+    select single lzone from kna1 into zone where kunnr eq cust.
+    select single vtext from tzont into vtext2 where spras eq 'E' AND land1 eq 'NG' and zone1 eq zone.
+
+
+
+    SELECT SINGLE NAMEV into contactname from knvk where kunnr = cust and namev <> ''.
+    SELECT SINGLE telf1 into contactno from knvk where kunnr = cust and kunnr <> ''.
+
+    if contactname <> ''.
+      move 'NIL' to contactname.
+    endif.
+
+    if contactno <> ''.
+      move 'NIL' to contactno.
+    endif.
+
+
+    move vbeln to podreturn-vbeln.
+    select single * from ZGANTRYINFO into CORRESPONDING FIELDS OF
+      podreturn where vbeln = podreturn-vbeln.
+
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        INPUT  = podreturn-haulier
+      IMPORTING
+        OUTPUT = podreturn-haulier.
+
+
+
+    select single  name1 into podreturn-transporter from lfa1
+      where lifnr = podreturn-haulier.
+
+    select single lfimg into podreturn-quantity from lips where vbeln = podreturn-vbeln.
+    move podreturn-quantity to qty.
+    clear htmldoc-line.
+
+    select single matnr into matnr from lips where vbeln = podreturn-vbeln.
+    select single name1 stras into (cust_name,address) from kna1 where kunnr = cust.
+    select single cellno from zgantryinfo into cellno where vbeln = podreturn-vbeln.
+
+    if counter =  count .
+      CONCATENATE '' '{"vbeln":"' podreturn-vbeln
+*      '","posnr":"' podreturn-posnr
+      '","driver":"' podreturn-driver
+      '","quantity":"' qty
+      '","truckno":"' podreturn-truckno
+      '","transporter":"' podreturn-transporter
+      '","pgi_date":"' del_date
+      '","headed_to":"' headedto
+      '","route":"' route
+      '","headedfrom":"' vtext1
+      '","zone":"' vtext2
+      into htmldoc-line.
+      insert htmldoc into table html.
+      CONCATENATE
+      '","pod_date":"' podat
+      '","pod_time":"' potim
+      '","customer":"' cust
+      '","cust_name":"' cust_name
+      '","address":"' address
+      '","cellno":"' cellno
+      '","matnr":"' matnr
+      '","contactname":"' contactname
+      '","contactno":"' contactno
+      '"}'
+      into htmldoc-line.
+    else.
+      CONCATENATE '' '{"vbeln":"' podreturn-vbeln
+*      '","posnr":"' podreturn-posnr
+     '","driver":"' podreturn-driver
+     '","quantity":"' qty
+     '","truckno":"' podreturn-truckno
+     '","transporter":"' podreturn-transporter
+     '","pgi_date":"' del_date
+     '","headed_to":"' headedto
+     '","route":"' route
+     '","headedfrom":"' vtext1
+     '","zone":"' vtext2
+     into htmldoc-line.
+      insert htmldoc into table html.
+      CONCATENATE
+      '","pod_date":"' podat
+      '","pod_time":"' potim
+      '","customer":"' cust
+      '","cust_name":"' cust_name
+      '","address":"' address
+      '","cellno":"' cellno
+      '","matnr":"' matnr
+      '","contactname":"' contactname
+      '","contactno":"' contactno
+     '"},'
+     into htmldoc-line.
+    endif.
+
+
+    insert htmldoc into table html.
+    add 1 to counter.
+  endselect.
+
+
+
+  move ']}' to htmldoc-line.
+  insert htmldoc into table html.
+
+
+
+ENDFUNCTION.

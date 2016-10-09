@@ -1,0 +1,188 @@
+FUNCTION ZPOD_GET_DELIVERIES.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  TABLES
+*"      QUERY_STRING STRUCTURE  W3QUERY
+*"      HTML STRUCTURE  W3HTML
+*"      MIME STRUCTURE  W3MIME
+*"  CHANGING
+*"     REFERENCE(CONTENT_TYPE) LIKE  W3PARAM-CONT_TYPE DEFAULT
+*"       'application/json'
+*"     REFERENCE(CONTENT_LENGTH) LIKE  W3PARAM-CONT_LEN
+*"     REFERENCE(RETURN_CODE) LIKE  W3PARAM-RET_CODE
+*"----------------------------------------------------------------------
+
+  tables: ZGANTRYINFO.
+  DATA: name TYPE STRING.
+  data: nh1 type string, nh2 type string , nh3 type string , lh1 type string ,
+        lh2 type string , lh3 type string , th1 type string , th2 type string,
+         th3 type string.
+  SORT QUERY_STRING DESCENDING.
+  READ TABLE QUERY_STRING WITH KEY NAME = '_CUSTNO'.
+  name = QUERY_STRING-VALUE.
+
+  data kunnr type kunnr.
+  data podreturn type ZPOD_INFO_INTERFACE.
+  data vbeln like likp-vbeln.
+  data posnr like lips-posnr.
+  data podtable type table of zpod_info_interface.
+  data qty type string.
+  data cts type string.
+  data tabix type i.
+  data tbs type string.
+  data podat like likp-podat.
+  data custname type kna1-NAME1.
+
+  move name to kunnr.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT  = kunnr
+    IMPORTING
+      OUTPUT = kunnr.
+
+
+
+* to return keys vbeln driver quantity truckno transporter
+
+  DATA: htmldoc LIKE LINE OF HTML.
+  move '{"results":[' to htmldoc-line.
+  insert htmldoc into table html.
+
+
+  data count type i.
+  if kunnr is not initial.
+    select l~vbeln into vbeln from likp  as l  inner join vbuk as v on l~vbeln
+      = v~vbeln where l~kunnr = kunnr
+      and v~wbstk = 'C'
+      and v~pdstk = 'A'.
+
+    endselect.
+  else.
+    select l~vbeln into vbeln from likp  as l  inner join vbuk as v on l~vbeln
+    = v~vbeln where v~wbstk = 'C'
+    and v~pdstk = 'A'.
+
+    endselect.
+  endif.
+  move sy-dbcnt to count.
+  move count to cts.
+
+  select single name1 into custname from  kna1 where kunnr = kunnr.
+
+  if count > 0.
+    concatenate '{"cust_name":"' custname '"},' into htmldoc-line.
+  else.
+    concatenate '{"cust_name":"' custname '"}' into htmldoc-line.
+  endif.
+  insert htmldoc into table html.
+
+  data counter type i value 1.
+
+  select l~vbeln l~podat into (vbeln,podat) from likp  as l  inner join vbuk as v on l~vbeln
+      = v~vbeln where l~kunnr = kunnr
+      and v~wbstk = 'C'
+      and v~pdstk = 'A'.
+
+
+
+    move vbeln to podreturn-vbeln.
+    select single * from ZGANTRYINFO  where vbeln = podreturn-vbeln.
+
+    move-CORRESPONDING zgantryinfo to    podreturn.
+
+    CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+      EXPORTING
+        INPUT  = podreturn-haulier
+      IMPORTING
+        OUTPUT = podreturn-haulier.
+
+
+    select single  name1 into podreturn-transporter from lfa1
+      where lifnr = podreturn-haulier.
+
+    select single lfimg into podreturn-quantity from lips where vbeln = podreturn-vbeln.
+    move podreturn-quantity to qty.
+    clear htmldoc-line.
+    move:
+      zgantryinfo-NHEIGHT1 to nh1,
+      zgantryinfo-NHEIGHT2 to nh2,
+      zgantryinfo-NHEIGHT3 to nh3,
+      zgantryinfo-LHEIGHT1 to lh1,
+      zgantryinfo-LHEIGHT2 to lh2,
+      zgantryinfo-LHEIGHT3 to lh3,
+      zgantryinfo-THEIGHT1 to th1,
+      zgantryinfo-THEIGHT2 to th2,
+      zgantryinfo-THEIGHT3 to th3.
+
+    if counter =  count .
+      CONCATENATE '' '{"vbeln":"' podreturn-vbeln
+*      '","posnr":"' podreturn-posnr
+      '","driver":"' podreturn-driver
+      '","quantity":"' qty
+      '","del_date":"' podat
+      '","truckno":"' podreturn-truckno
+      '","transporter":"' podreturn-transporter
+      into htmldoc-line.
+
+
+        insert htmldoc into table html.
+
+
+
+      concatenate
+      '","nh1":"' nh1
+      '","nh2":"' nh2
+      '","nh3":"' nh3
+      '","lh1":"' lh1
+      '","lh2":"' lh2
+      '","lh3":"' lh3
+      '","th1":"' th1
+      '","th2":"' th2
+      '","th3":"' th3
+      '","cellnumber":"' ZGANTRYINFO-CELLNO
+      '"}'
+      into htmldoc-line.
+    else.
+      CONCATENATE '' '{"vbeln":"' podreturn-vbeln
+*      '","posnr":"' podreturn-posnr
+     '","driver":"' podreturn-driver
+     '","quantity":"' qty
+     '","del_date":"' podat
+     '","truckno":"' podreturn-truckno
+     '","transporter":"' podreturn-transporter
+     into htmldoc-line.
+
+
+        insert htmldoc into table html.
+
+
+      concatenate
+       '","nh1":"' nh1
+       '","nh2":"' nh2
+       '","nh3":"' nh3
+       '","lh1":"' lh1
+       '","lh2":"' lh2
+       '","lh3":"' lh3
+       '","th1":"' th1
+       '","th2":"' th2
+       '","th3":"' th3
+       '","cellnumber":"' ZGANTRYINFO-CELLNO
+      '"},'
+      into htmldoc-line.
+    endif.
+
+
+    insert htmldoc into table html.
+
+    add 1 to counter.
+  endselect.
+
+
+
+  move ']}' to htmldoc-line.
+  insert htmldoc into table html.
+
+
+
+ENDFUNCTION.

@@ -1,0 +1,187 @@
+FUNCTION ZPOD_PROCESS_INVOICE.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  TABLES
+*"      QUERY_STRING STRUCTURE  W3QUERY
+*"      HTML STRUCTURE  W3HTML
+*"      MIME STRUCTURE  W3MIME
+*"  CHANGING
+*"     REFERENCE(CONTENT_TYPE) LIKE  W3PARAM-CONT_TYPE DEFAULT
+*"       'application/json'
+*"     REFERENCE(CONTENT_LENGTH) LIKE  W3PARAM-CONT_LEN
+*"     REFERENCE(RETURN_CODE) LIKE  W3PARAM-RET_CODE
+*"----------------------------------------------------------------------
+*& @Catalyst_Cyril Sayeh
+* 07066112584
+DATA: name type string, delv1 TYPE STRING, delv2 type string, delv3 type string, delv4 type string, delv5 type string,
+       amt1 type string, amt2 type string, amt3 type string,amt4 type string,amt5 type string.
+
+data invoice type string.
+tables:
+  ztransinvoice.
+
+data ztransinvoice_line type ztransinvoice.
+
+
+
+  SORT QUERY_STRING DESCENDING.
+  READ TABLE QUERY_STRING WITH KEY NAME = '_TRANSNO'.
+  name = QUERY_STRING-VALUE.
+
+   READ TABLE QUERY_STRING WITH KEY NAME = 'INVOICE'.
+  invoice = QUERY_STRING-VALUE.
+
+ READ TABLE QUERY_STRING WITH KEY NAME = 'DELV1'.
+  delv1 = QUERY_STRING-VALUE.
+
+ READ TABLE QUERY_STRING WITH KEY NAME = 'DELV2'.
+  delv2 = QUERY_STRING-VALUE.
+
+ READ TABLE QUERY_STRING WITH KEY NAME = 'DELV3'.
+  delv3 = QUERY_STRING-VALUE.
+
+ READ TABLE QUERY_STRING WITH KEY NAME = 'DELV4'.
+  delv4 = QUERY_STRING-VALUE.
+
+   READ TABLE QUERY_STRING WITH KEY NAME = 'DELV5'.
+  delv5 = QUERY_STRING-VALUE.
+
+
+ READ TABLE QUERY_STRING WITH KEY NAME = 'AMT1'.
+  amt1 = QUERY_STRING-VALUE.
+
+   READ TABLE QUERY_STRING WITH KEY NAME = 'AMT2'.
+  amt2 = QUERY_STRING-VALUE.
+
+   READ TABLE QUERY_STRING WITH KEY NAME = 'AMT3'.
+  amt3 = QUERY_STRING-VALUE.
+
+   READ TABLE QUERY_STRING WITH KEY NAME = 'AMT4'.
+  amt4 = QUERY_STRING-VALUE.
+
+   READ TABLE QUERY_STRING WITH KEY NAME = 'AMT5'.
+  amt5 = QUERY_STRING-VALUE.
+
+
+  data transporter type string.
+  data lifnr type lifnr.
+
+  move name to lifnr.
+
+  CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+    EXPORTING
+      INPUT         = lifnr
+   IMPORTING
+     OUTPUT        = lifnr
+            .
+
+ztransinvoice_line-trans_no = lifnr.
+ztransinvoice_line-invoice_no = invoice.
+ztransinvoice_line-currency = 'NGN'.
+ztransinvoice_line-trans_type = 'TRANSPORTER_INVOICE'.
+ztransinvoice_line-status = 'P'.
+ztransinvoice_line-transdate = sy-datum.
+ztransinvoice_line-time = sy-uzeit.
+
+if delv1 is not initial.
+  ztransinvoice_line-vbeln = delv1.
+  ztransinvoice_line-amount = amt1.
+  insert ztransinvoice from ztransinvoice_line.
+endif.
+
+
+if delv2 is not initial.
+  ztransinvoice_line-vbeln = delv2.
+  ztransinvoice_line-amount = amt2.
+  insert ztransinvoice from ztransinvoice_line.
+endif.
+
+if delv3 is not initial.
+  ztransinvoice_line-vbeln = delv3.
+  ztransinvoice_line-amount = amt3.
+  insert ztransinvoice from ztransinvoice_line.
+endif.
+
+
+if delv4 is not initial.
+  ztransinvoice_line-vbeln = delv4.
+  ztransinvoice_line-amount = amt4.
+  insert ztransinvoice from ztransinvoice_line.
+endif.
+
+if delv5 is not initial.
+  ztransinvoice_line-vbeln = delv5.
+  ztransinvoice_line-amount = amt5.
+  insert ztransinvoice from ztransinvoice_line.
+endif.
+
+*
+*  select single name1 into transporter from lfa1 where lifnr = lifnr.
+*
+*data : maildata type SODOCCHGI1.
+*data : mailtxt type table of SOLISTI1 with header line.
+*data : mailrec type table of SOMLRECI1 with header line.
+*
+*
+*CONCATENATE 'APPROVE PAYMENT FOR ' TRANSPORTER INTO MAILDATA-OBJ_NAME.
+*CONCATENATE 'APPROVE PAYMENT FOR ' TRANSPORTER INTO MAILDATA-OBJ_DESCR.
+*  maildata-obj_langu = sy-langu.
+*
+*  mailtxt-line = 'Approve the below Listed invoices for deliveries:'.
+*  append mailtxt.
+*  concatenate delv1 ': ' amt1 into mailtxt-line SEPARATED BY space.
+*  append mailtxt.
+*   concatenate delv2 ': ' amt2 into mailtxt-line SEPARATED BY space.
+*  append mailtxt.
+*   concatenate delv3 ': ' amt3 into mailtxt-line SEPARATED BY space.
+*  append mailtxt.
+*   concatenate delv4 ': ' amt4 into mailtxt-line SEPARATED BY space.
+*  append mailtxt.
+*   concatenate delv5 ': ' amt5 into mailtxt-line SEPARATED BY space.
+*  append mailtxt.
+*
+*
+*  mailrec-receiver = 'cyril.sayeh@serveconsulting.com'.
+*  mailrec-REC_TYPE = 'U'.
+*  append mailrec.
+*
+*
+*
+*  CALL FUNCTION 'SO_NEW_DOCUMENT_SEND_API1'
+*    EXPORTING
+*      DOCUMENT_DATA                    = maildata
+*     DOCUMENT_TYPE                    = 'RAW'
+**     PUT_IN_OUTBOX                    = ' '
+*     COMMIT_WORK                      = 'X'
+**     IP_ENCRYPT                       =
+**     IP_SIGN                          =
+**   IMPORTING
+**     SENT_TO_ALL                      =
+**     NEW_OBJECT_ID                    =
+*    TABLES
+*     OBJECT_HEADER                    = mailtxt
+*     OBJECT_CONTENT                   = mailtxt
+**     CONTENTS_HEX                     =
+**     OBJECT_PARA                      =
+**     OBJECT_PARB                      =
+*      RECEIVERS                        = mailrec
+**   EXCEPTIONS
+**     TOO_MANY_RECEIVERS               = 1
+**     DOCUMENT_NOT_SENT                = 2
+**     DOCUMENT_TYPE_NOT_EXIST          = 3
+**     OPERATION_NO_AUTHORIZATION       = 4
+**     PARAMETER_ERROR                  = 5
+**     X_ERROR                          = 6
+**     ENQUEUE_ERROR                    = 7
+**     OTHERS                           = 8
+*            .
+*  IF SY-SUBRC <> 0.
+** Implement suitable error handling here
+*  ENDIF.
+
+
+
+
+
+
+ENDFUNCTION.
